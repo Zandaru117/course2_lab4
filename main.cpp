@@ -1,71 +1,46 @@
 #include <iostream>
 #include <map>
-#include <utility> 
 
-#include "MyContainer.hpp" 
 #include "MyAllocator.hpp"
+#include "MyContainer.hpp"
 
 long long factorial(int n) {
-    long long res = 1;
-    for (int i = 2; i <= n; ++i) {
-        res *= i;
-    }
-    return res;
+    long long r = 1;
+    for (int i = 1; i <= n; ++i)
+        r *= i;
+    return r;
 }
 
 int main() {
+    std::cout << "std::map with default allocator\n";
+    std::map<int, int> m1;
+    for (int i = 0; i < 10; ++i)
+        m1[i] = factorial(i);
 
-    std::cout << "Creating std::map (default allocator)" << std::endl;
-    std::map<int, int> mapDefault;
-    for (int i = 0; i < 10; ++i) {
-        mapDefault[i] = factorial(i);
-    }
-    std::cout << "Filled 10 elements (factorials)" << std::endl;
+    std::cout << "std::map with custom allocator\n";
+    using Pair = std::pair<const int, int>;
+    using Alloc = MyAllocator<Pair, 10>;
+    std::map<int, int, std::less<int>, Alloc> m2;
 
+    for (int i = 0; i < 10; ++i)
+        m2[i] = factorial(i);
 
-    using MyMapAllocator = MyAllocator<std::pair<const int, int>, 10>;
-    using MyMap = std::map<int, int, std::less<int>, MyMapAllocator>;
+    for (auto& [k, v] : m2)
+        std::cout << k << " " << v << "\n";
 
-    std::cout << "Creating std::map (MyAllocator<..., 10>)" << std::endl;
-    MyMap mapCustom;
-    
-    std::cout << "Filling with 10 elements (factorials)" << std::endl;
-    for (int i = 0; i < 10; ++i) {
-        mapCustom[i] = factorial(i);
-    }
+    std::cout << "MyContainer with default allocator\n";
+    MyContainer<int> c1;
+    for (int i = 0; i < 10; ++i)
+        c1.push_back(i);
 
-    std::cout << "Outputting mapCustom contents:" << std::endl;
-    for (const auto& pair : mapCustom) {
-        std::cout << " " << pair.first << " " << pair.second << std::endl;
-    }
+    std::cout << "MyContainer with custom allocator\n";
+    MyContainer<int, MyAllocator<int, 10>> c2;
+    for (int i = 0; i < 10; ++i)
+        c2.push_back(i);
 
+    for (int x : c2)
+        std::cout << x << " ";
+    std::cout << "\n";
 
-    std::cout << "Creating MyContainer (default allocator)" << std::endl;
-    MyContainer<int> containerDefault;
-    
-    std::cout << "Filling with 10 elements (0-9)" << std::endl;
-    for (int i = 0; i < 10; ++i) {
-        containerDefault.push_back(i);
-    }
-
-
-
-    std::cout << "Creating MyContainer (MyAllocator<int, 10>)" << std::endl;
-    MyContainer<int, MyAllocator<int, 10>> containerCustom;
-    
-    std::cout << "Filling with 10 elements (0-9)" << std::endl;
-    for (int i = 0; i < 10; ++i) {
-        containerCustom.push_back(i);
-    }
-
-    std::cout << "Outputting containerCustom contents:" << std::endl;
-    std::cout << " ";
-    for (int value : containerCustom) {
-        std::cout << value << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "(Container and allocator operations complete, memory will be released in destructors)" << std::endl;
-    
     return 0;
 }

@@ -1,72 +1,39 @@
 #pragma once
 
 #include <memory>
-#include <iterator>
-#include <cstddef>
-#include "MyAllocator.hpp" 
 
-template <typename T, typename Allocator = std::allocator<T>>
+template <typename T, typename Alloc = std::allocator<T>>
 class MyContainer {
 private:
     struct Node {
-        T value_;
-        Node* next_;
-        Node(const T& val) : value_(val), next_(nullptr) {}
+        T value;
+        Node* next;
+        Node(const T& v);
     };
 
-    using NodeAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<Node>;
+    using NodeAlloc =
+        typename std::allocator_traits<Alloc>::template rebind_alloc<Node>;
 
-    NodeAllocator nodeAlloc_;
+    NodeAlloc alloc_;
     Node* head_;
     Node* tail_;
-    size_t size_;
 
 public:
-    class iterator {
-    public:
-        using iterator_category = std::forward_iterator_tag;
-        using value_type = T;
-        using difference_type = std::ptrdiff_t;
-        using pointer = T*;
-        using reference = T&;
-
-        iterator(Node* ptr) : _nodePtr(ptr) {}
-
-        reference operator*() const { return _nodePtr->value_; }
-        pointer operator->() const { return &(_nodePtr->value_); }
-
-        iterator& operator++() {
-            _nodePtr = _nodePtr->next_;
-            return *this;
-        }
-        
-        iterator operator++(int) {
-            iterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        friend bool operator==(const iterator& a, const iterator& b) {
-            return a._nodePtr == b._nodePtr;
-        }
-        friend bool operator!=(const iterator& a, const iterator& b) {
-            return a._nodePtr != b._nodePtr;
-        }
-
-    private:
-        Node* _nodePtr;
-    };
-
-    explicit MyContainer(const Allocator& alloc = Allocator());
+    MyContainer(const Alloc& a = Alloc());
     ~MyContainer();
 
-    void push_back(const T& value);
+    void push_back(const T& v);
 
-    size_t size() const { return size_; }
-    bool empty() const { return size_ == 0; }
+    struct iterator {
+        Node* p;
+        iterator(Node* x);
+        T& operator*();
+        iterator& operator++();
+        bool operator!=(const iterator& other) const;
+    };
 
-    iterator begin() { return iterator(head_); }
-    iterator end() { return iterator(nullptr); }
+    iterator begin();
+    iterator end();
 };
 
 #include "MyContainer.tpp"

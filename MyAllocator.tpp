@@ -1,96 +1,90 @@
-template <typename T, size_t N>
-MyAllocator<T, N>::MyAllocator() noexcept 
-    : pool_(nullptr), free_list_head_(nullptr), pool_size_bytes_(N * BLOCK_SIZE) {
-    
-    if (N > 0) {
-        pool_ = static_cast<char*>(::operator new(pool_size_bytes_));
-        
-        free_list_head_ = reinterpret_cast<Slot*>(pool_);
-        Slot* current = free_list_head_;
-        
-        for (size_t i = 0; i < N - 1; ++i) {
-            Slot* next = reinterpret_cast<Slot*>(reinterpret_cast<char*>(current) + BLOCK_SIZE);
-            current->next = next;
-            current = next;
-        }
-        current->next = nullptr;
-    }
+#include <new>
+
+template <typename T, std::size_t N>
+MyAllocator<T, N>::MyAllocator() noexcept
+    : pools_(nullptr) {
+    pools_ = create_pool();
 }
 
-template <typename T, size_t N>
-MyAllocator<T, N>::MyAllocator(MyAllocator&& other) noexcept
-    : pool_(other.pool_), 
-      free_list_head_(other.free_list_head_), 
-      pool_size_bytes_(other.pool_size_bytes_) {
-    
-    other.pool_ = nullptr;
-    other.free_list_head_ = nullptr;
-    other.pool_size_bytes_ = 0;
-}
-
-template <typename T, size_t N>
-MyAllocator<T, N>& MyAllocator<T, N>::operator=(MyAllocator&& other) noexcept {
-    if (this != &other) {
-        ::operator delete(pool_);
-
-        pool_ = other.pool_;
-        free_list_head_ = other.free_list_head_;
-        pool_size_bytes_ = other.pool_size_bytes_;
-        
-        other.pool_ = nullptr;
-        other.free_list_head_ = nullptr;
-        other.pool_size_bytes_ = 0;
-    }
-    return *this;
-}
-
-template <typename T, size_t N>
-MyAllocator<T, N>::~MyAllocator() noexcept {
-    if (pool_ != nullptr) { 
-        ::operator delete(pool_);
-    }
-}
-
-template <typename T, size_t N>
+template <typename T, std::size_t N>
 template <class U>
-MyAllocator<T, N>::MyAllocator(const MyAllocator<U, N>&) noexcept 
-    : pool_(nullptr), free_list_head_(nullptr), pool_size_bytes_(0) {} 
-
-template <typename T, size_t N>
-bool MyAllocator<T, N>::isInPool(T* p) const {
-    return pool_ && (reinterpret_cast<char*>(p) >= pool_) && 
-           (reinterpret_cast<char*>(p) < (pool_ + pool_size_bytes_));
+MyAllocator<T, N>::MyAllocator(const MyAllocator<U, N>&) noexcept
+    : pools_(nullptr) {
+    pools_ = create_pool();
 }
 
-template <typename T, size_t N>
+template <typename T, std::size_t N>
+MyAllocator<T, N>::~MyAllocator() {
+    while (pools_) {
+        ::operator delete(pools_->memory);
+        Pool* next = pools_->next;
+        delete pools_;
+        pools_ = next;
+    }
+}
+
+template <typename T, std::size_t N>
+typename MyAllocator<T, N>::Pool*
+MyAllocator<T, N>::create_pool() {
+    Pool* pool = new Pool;
+    pool->memory = static_cast<char*>(::operator new(sizeof(T) * N));
+    pool->free_list = nullptr;
+    pool->next = pools_;
+
+    for (std::size_t i = 0; i < N; ++i) {
+        Node* node =
+            reinterpret_cast<Node*>(pool->memory + i * sizeof(T));
+        node->next = pool->free_list;
+        pool->free_list = node;
+    }
+    return pool;
+}
+
+template <typename T, std::size_t N>
+bool MyAllocator<T, N>::owns(T* p, Pool* pool) const {
+    char* c = reinterpret_cast<char*>(p);
+    return c >= pool->memory &&
+           c < pool->memory + sizeof(T) * N;
+}
+
+template <typename T, std::size_t N>
 T* MyAllocator<T, N>::allocate(std::size_t n) {
-    if (n == 1 && free_list_head_ != nullptr) {
-        T* p = reinterpret_cast<T*>(free_list_head_);
-        free_list_head_ = free_list_head_->next;
-        return p;
+    if (n != 1)
+        return static_cast<T*>(::operator new(n * sizeof(T)));
+
+    Pool* pool = pools_;
+    while (pool) {
+        if (pool->free_list) {
+            Node* node = pool->free_list;
+            pool->free_list = node->next;
+            return reinterpret_cast<T*>(node);
+        }
+        pool = pool->next;
     }
-    return static_cast<T*>(::operator new(n * sizeof(T)));
+
+    pools_ = create_pool();
+    Node* node = pools_->free_list;
+    pools_->free_list = node->next;
+    return reinterpret_cast<T*>(node);
 }
 
-template <typename T, size_t N>
+template <typename T, std::size_t N>
 void MyAllocator<T, N>::deallocate(T* p, std::size_t n) {
-    if (n == 1 && isInPool(p)) {
-        Slot* slot = reinterpret_cast<Slot*>(p);
-        
-        slot->next = free_list_head_;
-        free_list_head_ = slot;
-    }
-    else {
+    if (!p) return;
+
+    if (n != 1) {
         ::operator delete(p);
+        return;
     }
-}
 
-template <class T, size_t N1, class U, size_t N2>
-bool operator==(const MyAllocator<T, N1>& lhs, const MyAllocator<U, N2>& rhs) noexcept {
-    return false;
-}
-
-template <class T, size_t N1, class U, size_t N2>
-bool operator!=(const MyAllocator<T, N1>& lhs, const MyAllocator<U, N2>& rhs) noexcept {
-    return true;
+    Pool* pool = pools_;
+    while (pool) {
+        if (owns(p, pool)) {
+            Node* node = reinterpret_cast<Node*>(p);
+            node->next = pool->free_list;
+            pool->free_list = node;
+            return;
+        }
+        pool = pool->next;
+    }
 }
