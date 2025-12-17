@@ -32,8 +32,7 @@ MyAllocator<T, N>::create_pool() {
     pool->next = pools_;
 
     for (std::size_t i = 0; i < N; ++i) {
-        Node* node =
-            reinterpret_cast<Node*>(pool->memory + i * sizeof(T));
+        Node* node = reinterpret_cast<Node*>(pool->memory + i * sizeof(T));
         node->next = pool->free_list;
         pool->free_list = node;
     }
